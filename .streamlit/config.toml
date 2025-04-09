@@ -1,0 +1,10 @@
+# config.toml
+
+[theme]
+primaryColor = "#4BE8FF"
+backgroundColor = "#0E1117"
+textColor = "#FAFAFA"
+secondaryBackgroundColor = "#262730"
+
+[server]
+maxUploadSize = 500
