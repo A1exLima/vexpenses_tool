@@ -11,8 +11,8 @@ from docx.oxml.ns import qn
 import fitz  # PyMuPDF
 import zipfile
 
-st.set_page_config(page_title="Imagens para Word", layout="wide")
-st.title("📎 Ferramenta Spot - VExpenses")
+st.set_page_config(page_title="Automação SPOT", layout="wide")
+st.title("Automação TRN - Ferramentas de evidências")
 
 MAX_ZIP_SIZE_MB = 150
 MAX_ZIP_SIZE_BYTES = MAX_ZIP_SIZE_MB * 1024 * 1024
