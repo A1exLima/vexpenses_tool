@@ -9,9 +9,13 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 import fitz  # PyMuPDF
+import zipfile
 
 st.set_page_config(page_title="Imagens para Word", layout="wide")
 st.title("📎 Ferramenta Spot - VExpenses")
+
+MAX_ZIP_SIZE_MB = 150
+MAX_ZIP_SIZE_BYTES = MAX_ZIP_SIZE_MB * 1024 * 1024
 
 def extrair_links_e_ids(file):
     wb = load_workbook(file, data_only=True)
@@ -57,11 +61,8 @@ def inserir_imagem_redimensionada(paragraph, img, largura_max=5.5, altura_max=7)
     img_io.seek(0)
     largura, altura = img.size
     escala = min((largura_max * 96) / largura, (altura_max * 96) / altura)
-
-    # Aumenta a escala em 5%
     escala *= 1.1
-
-    nova_largura = largura * escala / 96  # Conversão de px para polegadas
+    nova_largura = largura * escala / 96
     run = paragraph.add_run()
     run.add_picture(img_io, width=Inches(nova_largura))
 
@@ -101,7 +102,8 @@ if uploaded_file:
             if st.button("📝 Gerar Documento Word"):
                 erros = []
                 doc = Document()
-                log_area = st.empty()  # Área para log de progresso
+                log_area = st.empty()
+                imagens_com_nomes = []
 
                 for i, (linha, id_despesa, id_relatorio, url) in enumerate(info_links, 1):
                     try:
@@ -129,17 +131,15 @@ if uploaded_file:
                                     raise ValueError("Imagem aparentemente em branco.")
                                 imagens = [img]
 
-                        for img in imagens:
+                        for idx, img in enumerate(imagens):
+                            nome_img = f"{id_despesa}_pag{idx+1}.png" if len(imagens) > 1 else f"{id_despesa}.png"
+                            imagens_com_nomes.append((nome_img, img))
                             doc.add_page_break()
-
-                            # Texto centralizado
                             p = doc.add_paragraph()
                             ajustar_altura_doc_paragrafo(p)
                             p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
                             run = p.add_run(f"ID da Despesa: {id_despesa} / ID do Relatório: {id_relatorio}")
                             aplicar_fonte_arial(run)
-
-                            # Imagem centralizada
                             p_img = doc.add_paragraph()
                             p_img.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
                             inserir_imagem_redimensionada(p_img, img)
@@ -159,7 +159,6 @@ if uploaded_file:
                 buffer = BytesIO()
                 doc.save(buffer)
                 buffer.seek(0)
-
                 log_area.empty()
 
                 st.success("✅ Documento Word gerado com sucesso!")
@@ -169,6 +168,43 @@ if uploaded_file:
                     file_name="anexos_ordenados.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
+
+                st.markdown("### 📦 Download de imagens zipadas (máx. 150MB cada)")
+                pacote_atual = BytesIO()
+                zip_atual = zipfile.ZipFile(pacote_atual, mode="w", compression=zipfile.ZIP_DEFLATED)
+                tamanho_atual = 0
+                pacote_idx = 1
+                lista_buffers = []
+
+                for nome, imagem in imagens_com_nomes:
+                    buffer_img = BytesIO()
+                    imagem.save(buffer_img, format="PNG")
+                    tamanho_img = buffer_img.tell()
+                    buffer_img.seek(0)
+
+                    if tamanho_atual + tamanho_img > MAX_ZIP_SIZE_BYTES:
+                        zip_atual.close()
+                        pacote_atual.seek(0)
+                        lista_buffers.append((pacote_idx, pacote_atual))
+                        pacote_idx += 1
+                        pacote_atual = BytesIO()
+                        zip_atual = zipfile.ZipFile(pacote_atual, mode="w", compression=zipfile.ZIP_DEFLATED)
+                        tamanho_atual = 0
+
+                    zip_atual.writestr(nome, buffer_img.read())
+                    tamanho_atual += tamanho_img
+
+                zip_atual.close()
+                pacote_atual.seek(0)
+                lista_buffers.append((pacote_idx, pacote_atual))
+
+                for idx, zip_buffer in lista_buffers:
+                    st.download_button(
+                        label=f"📁 Baixar pacote ZIP {idx}",
+                        data=zip_buffer,
+                        file_name=f"imagens_pacote_{idx}.zip",
+                        mime="application/zip"
+                    )
 
                 if erros:
                     st.markdown("### ❌ Falhas detectadas")
