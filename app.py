@@ -11,11 +11,17 @@ from docx.oxml.ns import qn
 import fitz  # PyMuPDF
 import zipfile
 
-st.set_page_config(page_title="Automação SPOT", layout="wide")
-st.title("Automação TRN - Ferramentas de evidências")
+st.set_page_config(page_title="Imagens para Word", layout="wide")
+st.title("📎 Ferramenta Spot - VExpenses")
 
 MAX_ZIP_SIZE_MB = 150
 MAX_ZIP_SIZE_BYTES = MAX_ZIP_SIZE_MB * 1024 * 1024
+
+# Inicializa session_state
+if "word_buffer" not in st.session_state:
+    st.session_state.word_buffer = None
+if "zip_buffers" not in st.session_state:
+    st.session_state.zip_buffers = None
 
 def extrair_links_e_ids(file):
     wb = load_workbook(file, data_only=True)
@@ -100,6 +106,13 @@ if uploaded_file:
                 st.stop()
 
             if st.button("📝 Gerar Documento Word"):
+                st.session_state.word_buffer = None
+                st.session_state.zip_buffers = None
+                gerar_documento = True
+            else:
+                gerar_documento = False
+
+            if gerar_documento:
                 erros = []
                 doc = Document()
                 log_area = st.empty()
@@ -159,17 +172,8 @@ if uploaded_file:
                 buffer = BytesIO()
                 doc.save(buffer)
                 buffer.seek(0)
-                log_area.empty()
+                st.session_state.word_buffer = buffer
 
-                st.success("✅ Documento Word gerado com sucesso!")
-                st.download_button(
-                    label="📥 Baixar Word",
-                    data=buffer,
-                    file_name="anexos_ordenados.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-
-                st.markdown("### 📦 Download de imagens zipadas (máx. 150MB cada)")
                 pacote_atual = BytesIO()
                 zip_atual = zipfile.ZipFile(pacote_atual, mode="w", compression=zipfile.ZIP_DEFLATED)
                 tamanho_atual = 0
@@ -197,8 +201,24 @@ if uploaded_file:
                 zip_atual.close()
                 pacote_atual.seek(0)
                 lista_buffers.append((pacote_idx, pacote_atual))
+                st.session_state.zip_buffers = lista_buffers
 
-                for idx, zip_buffer in lista_buffers:
+                log_area.empty()
+
+                st.success("✅ Documento Word e pacotes ZIP gerados com sucesso!")
+
+            # Exibe os botões de download sem reiniciar app
+            if st.session_state.word_buffer:
+                st.download_button(
+                    label="📥 Baixar Word",
+                    data=st.session_state.word_buffer,
+                    file_name="anexos_ordenados.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+
+            if st.session_state.zip_buffers:
+                st.markdown("### 📦 Download de imagens zipadas (máx. 150MB cada)")
+                for idx, zip_buffer in st.session_state.zip_buffers:
                     st.download_button(
                         label=f"📁 Baixar pacote ZIP {idx}",
                         data=zip_buffer,
@@ -206,10 +226,10 @@ if uploaded_file:
                         mime="application/zip"
                     )
 
-                if erros:
-                    st.markdown("### ❌ Falhas detectadas")
-                    for linha, id_despesa, id_relatorio, erro in erros:
-                        st.write(f"Linha {linha} | Despesa: {id_despesa} | Relatório: {id_relatorio} → {erro}")
+            if 'erros' in locals() and erros:
+                st.markdown("### ❌ Falhas detectadas")
+                for linha, id_despesa, id_relatorio, erro in erros:
+                    st.write(f"Linha {linha} | Despesa: {id_despesa} | Relatório: {id_relatorio} → {erro}")
 
     except Exception as e:
         st.error(f"Erro ao processar: {e}")
